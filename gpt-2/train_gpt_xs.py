@@ -67,7 +67,9 @@ class CasualSelfAttention(nn.Module):
         self.n_head=config.n_head
         
         #openai/hf naming it bias instead of trill or mask(mask)
-        self.register_buffer("bias",torch.tril(torch.ones(config.block_size,config.block_size)))
+        self.register_buffer("bias",torch.tril(torch.ones(config.block_size,config.block_size))
+                             .view(1,1,config.block_size,config.block_size))
+                                                
         
     
     def forward(self,x):
@@ -120,8 +122,8 @@ class Block(nn.Module):
         self.mlp=MLP(config)
     
     def forward(self,x):
-        x=x+self.attn(self.ln1(x))
-        x=x+self.mlp(self.ln2(x))
+        x=x+self.attn(self.ln_1(x))
+        x=x+self.mlp(self.ln_2(x))
         return x
     
 class GPT2(nn.Module):
@@ -136,6 +138,26 @@ class GPT2(nn.Module):
             )
         )
         self.lm_head=nn.Linear(config.n_embd,config.vocab_size,bias=False)
+    
+    def forward(self, idx, targets=None):
+        # idx is of shape (B, T)
+        B, T = idx.size()
+        assert T <= self.config.block_size, f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}"
+        # forward the token and posisition embeddings
+        pos = torch.arange(0, T, dtype=torch.long, device=idx.device) # shape (T)
+        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (T, n_embd)
+        tok_emb = self.transformer.wte(idx) # token embeddings of shape (B, T, n_embd)
+        x = tok_emb + pos_emb
+        # forward the blocks of the transformer
+        for block in self.transformer.h:
+            x = block(x)
+        # forward the final layernorm and the classifier
+        x = self.transformer.ln_f(x)
+        logits = self.lm_head(x) # (B, T, vocab_size)
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+        return logits, loss
         
     @classmethod
     def from_pretrained(cls, model_type):
@@ -185,6 +207,53 @@ class GPT2(nn.Module):
                     sd[k].copy_(sd_hf[k])
 
         return model
-    
-model=GPT2.from_pretrained("gpt2")
-print("it worked")
+
+#we preload the weights from the hf and trying infernce on our architecture
+
+num_return_sequences=5
+max_length=30
+
+# model=GPT2.from_pretrained("gpt2")
+model =GPT2(GPTConfig)
+model.eval() # not training but evaluating
+model.to('cuda')
+
+
+#prefix tokens
+
+import tiktoken
+enc=tiktoken.get_encoding("gpt2")
+tokens=enc.encode("Hello,I'm a language model,")
+tokens=torch.tensor(tokens,dtype=torch.long)#(8,)
+tokens=tokens.unsqueeze(0).repeat(num_return_sequences,1)#(5,8)
+x=tokens.to('cuda')
+
+#x=(B,T) where B=5,T=8
+
+torch.manual_seed(42)
+torch.cuda.manual_seed(42)
+
+while x.size(1)<max_length: # meaning till 1 dim < 30 tokens or so 
+    #forwarding the model to get the logits for the next token
+    with torch.no_grad():
+        logits,_=model(x)#(B,T,vocab_size)
+        #take the logits at the last position
+        logits=logits[:,-1,:] #(B,vocab_size)
+        #getting the probs using softmax
+        probs=F.softmax(logits,-1)
+        #doing tok_k for 50 next tokens (used in the hf pipeline deafaultly )
+        #top_k in here becomes (5,50),top_k_indicies(5,50)
+        topk_probs,topk_indicies=torch.topk(probs,50,dim=-1)
+        #selcting tokens from top_k
+        ix=torch.multinomial(topk_probs,1)#(B,1) #sampling 1 prob from top_k_probs randomly
+        xcol=torch.gather(topk_indicies,-1,ix) #(B,1) # gathering the token from the ix choosen
+        # append to the seq
+        x=torch.cat((x,xcol),dim=1) #appending the token to our tokens
+        
+for i in range(num_return_sequences):
+    tokens=x[i,:max_length].tolist()
+    decoded=enc.decode(tokens)
+    print(">",decoded)
+        
+        
+        

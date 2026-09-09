@@ -6,5 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "ipykernel>=7.3.0",
+    "tiktoken>=0.14.0",
     "torch>=2.14.0",
 ]
