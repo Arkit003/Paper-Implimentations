@@ -3,6 +3,7 @@ import torch
 from dataclasses import dataclass
 import math
 import torch.nn.functional as F
+import tiktoken
 
 @dataclass
 class GPTConfig:
@@ -138,6 +139,9 @@ class GPT2(nn.Module):
             )
         )
         self.lm_head=nn.Linear(config.n_embd,config.vocab_size,bias=False)
+        
+        #weight sharing scheme
+        self.transformer.wte.weight=self.lm_head.weight
     
     def forward(self, idx, targets=None):
         # idx is of shape (B, T)
@@ -212,13 +216,59 @@ class GPT2(nn.Module):
 
 num_return_sequences=5
 max_length=30
+device='cuda'
 
+class DataLoaderLite:
+    def __init__(self,B,T,device):
+        self.B=B
+        self.T=T
+        self.device=device
+    
+        #creating tokens during intializing of our DataLoader Object
+        with open("input.txt",'r') as f:
+            data=f.read()
+    
+        self.encoder=tiktoken.get_encoding("gpt2")
+        tokens=self.encoder.encode(data)
+        self.tokens=torch.tensor(tokens)
+        print(f"Loaded {len(self.tokens)} tokens")
+        print(f"1 epoch={len(self.tokens)//(B*T)} batches")
+        
+        #state
+        self.current_position=0
+        
+    def next_batch(self,):
+        B,T=self.B,self.T
+        #creating buffer 
+        buf=self.tokens[self.current_position:self.current_position+B*T+1]
+        x=buf[:-1].view(B,T).to(self.device)
+        y=buf[1:].view(B,T).to(self.device)
+        
+        #getting the next set of tokens for the next batch
+        self.current_position+=B*T
+        if self.current_position >len(self.tokens):
+            self.current_position=0
+        return x,y    
+    
+train_loader = DataLoaderLite(B=4,T=32,device=device)
 # model=GPT2.from_pretrained("gpt2")
-model =GPT2(GPTConfig)
-model.eval() # not training but evaluating
+model =GPT2(GPTConfig())
+# model.eval() # not training but evaluating
 model.to('cuda')
+optimizer=torch.optim.AdamW(model.parameters(),lr=3e-4)
+for i in range(50):
+    optimizer.zero_grad()
+    x,y= train_loader.next_batch()
+    logits,loss=model(x,y)
+    loss.backward()
+    optimizer.step()
+    print(f"step{i} ,loss :{loss.item()}")
 
+print(loss)
+import sys
+sys.exit(0)
 
+print("not working2")
 #prefix tokens
 
 import tiktoken
