@@ -64,6 +64,7 @@ class CasualSelfAttention(nn.Module):
         self.c_attn=nn.Linear(config.n_embd,3*config.n_embd)
         #output projection
         self.c_proj=nn.Linear(config.n_embd,config.n_embd)
+        self.c_proj.NANOGPT_SCALE_INIT = 1
         self.n_embd=config.n_embd
         self.n_head=config.n_head
         
@@ -106,6 +107,7 @@ class MLP(nn.Module):
         self.c_fc=nn.Linear(config.n_embd,config.n_embd *4)
         self.gelu=nn.GELU(approximate='tanh')
         self.c_proj=nn.Linear(config.n_embd * 4,config.n_embd)
+        self.c_proj.NANOGPT_SCALE_INIT = 1
         
     def forward(self,x):
         x=self.c_fc(x)
@@ -141,7 +143,23 @@ class GPT2(nn.Module):
         self.lm_head=nn.Linear(config.n_embd,config.vocab_size,bias=False)
         
         #weight sharing scheme
+        #the output layer could share up the same vectors in the ou
         self.transformer.wte.weight=self.lm_head.weight
+        
+        #initing params
+        self.apply(self._init_weights)
+        
+    def _init_weights(self,module):
+        '''applies the std and mean during model weights initialization so that random weights should get initalized differently'''
+        std = 0.02
+        if hasattr(module, 'NANOGPT_SCALE_INIT'):# if the module has that attribute name then the std will change.
+            std *= (2 * self.config.n_layer) ** -0.5 
+        if isinstance(module,nn.Linear):
+            torch.nn.init.normal_(module.weight,mean=0.0,std=std)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module,nn.Embedding):
+            torch.nn.init.normal_(module.weight,mean=0.0 ,std=0.02)
     
     def forward(self, idx, targets=None):
         # idx is of shape (B, T)
@@ -216,7 +234,17 @@ class GPT2(nn.Module):
 
 num_return_sequences=5
 max_length=30
-device='cuda'
+device = "cpu"
+if torch.cuda.is_available():
+    device = "cuda"
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    device = "mps"
+print(f"using device: {device}")
+
+torch.manual_seed(1337)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1337)
+
 
 class DataLoaderLite:
     def __init__(self,B,T,device):
