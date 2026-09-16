@@ -288,6 +288,7 @@ torch.set_float32_matmul_precision('high')#tf-32 bit precision whereever pytorch
 model =GPT2(GPTConfig())
 # model.eval() # not training but evaluating
 model.to('cuda')
+model=torch.compile(model)
 optimizer=torch.optim.AdamW(model.parameters(),lr=3e-4)
 for i in range(50):
     t0=time.time()
