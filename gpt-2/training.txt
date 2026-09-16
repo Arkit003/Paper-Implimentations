@@ -1,0 +1,123 @@
+#baseline for float-23 on [1,1024]#the memory could only suport till this as this was using 3735 mb from 6141 mb of memory
+### trying with the default pytorch tp_32 precision
+using device: cuda
+Loaded 338025 tokens
+1 epoch=330 batches
+step0 ,loss :10.924736022949219, dt:410.44ms, tok/sec:2494.89
+step1 ,loss :9.4527587890625, dt:267.13ms, tok/sec:3833.33
+step2 ,loss :9.09183120727539, dt:268.93ms, tok/sec:3807.69
+step3 ,loss :8.757146835327148, dt:267.44ms, tok/sec:3828.83
+step4 ,loss :8.872179985046387, dt:268.00ms, tok/sec:3820.90
+step5 ,loss :8.355033874511719, dt:267.82ms, tok/sec:3823.47
+step6 ,loss :8.180399894714355, dt:268.68ms, tok/sec:3811.23
+step7 ,loss :7.992529392242432, dt:268.23ms, tok/sec:3817.63
+step8 ,loss :7.933725833892822, dt:268.08ms, tok/sec:3819.75
+step9 ,loss :7.699762344360352, dt:267.90ms, tok/sec:3822.38
+step10 ,loss :7.32474422454834, dt:267.95ms, tok/sec:3821.62
+step11 ,loss :7.613431930541992, dt:268.24ms, tok/sec:3817.44
+step12 ,loss :7.065403461456299, dt:267.84ms, tok/sec:3823.13
+step13 ,loss :7.2086687088012695, dt:268.78ms, tok/sec:3809.84
+step14 ,loss :6.975041389465332, dt:267.97ms, tok/sec:3821.27
+step15 ,loss :6.911211967468262, dt:267.79ms, tok/sec:3823.95
+step16 ,loss :6.631719589233398, dt:267.87ms, tok/sec:3822.68
+step17 ,loss :6.590969085693359, dt:268.98ms, tok/sec:3807.01
+step18 ,loss :6.416153907775879, dt:267.91ms, tok/sec:3822.11
+step19 ,loss :6.502250671386719, dt:267.93ms, tok/sec:3821.92
+step20 ,loss :6.03477144241333, dt:268.94ms, tok/sec:3807.58
+step21 ,loss :13.032745361328125, dt:267.72ms, tok/sec:3824.85
+step22 ,loss :6.105770587921143, dt:267.58ms, tok/sec:3826.88
+step23 ,loss :5.901916980743408, dt:268.10ms, tok/sec:3819.46
+step24 ,loss :6.233818054199219, dt:268.67ms, tok/sec:3811.37
+step25 ,loss :6.20671272277832, dt:267.79ms, tok/sec:3823.93
+step26 ,loss :6.288604259490967, dt:268.15ms, tok/sec:3818.70
+step27 ,loss :6.120580673217773, dt:267.96ms, tok/sec:3821.53
+step28 ,loss :6.360348701477051, dt:270.83ms, tok/sec:3781.02
+step29 ,loss :6.348227500915527, dt:267.76ms, tok/sec:3824.36
+step30 ,loss :6.170969486236572, dt:268.03ms, tok/sec:3820.52
+step31 ,loss :6.144465446472168, dt:269.10ms, tok/sec:3805.34
+step32 ,loss :6.539951801300049, dt:267.84ms, tok/sec:3823.15
+step33 ,loss :6.412109375, dt:267.98ms, tok/sec:3821.24
+step34 ,loss :6.3558454513549805, dt:270.10ms, tok/sec:3791.14
+step35 ,loss :5.991641998291016, dt:268.44ms, tok/sec:3814.66
+step36 ,loss :5.949681282043457, dt:268.06ms, tok/sec:3819.98
+step37 ,loss :6.340294361114502, dt:269.24ms, tok/sec:3803.36
+step38 ,loss :5.857560634613037, dt:268.55ms, tok/sec:3813.03
+step39 ,loss :6.490053176879883, dt:268.06ms, tok/sec:3820.03
+step40 ,loss :6.413544654846191, dt:268.12ms, tok/sec:3819.23
+step41 ,loss :6.514549732208252, dt:268.38ms, tok/sec:3815.43
+step42 ,loss :6.292991638183594, dt:268.16ms, tok/sec:3818.68
+step43 ,loss :6.386998653411865, dt:268.38ms, tok/sec:3815.52
+step44 ,loss :6.414868354797363, dt:268.07ms, tok/sec:3819.93
+step45 ,loss :6.344621658325195, dt:267.85ms, tok/sec:3823.03
+step46 ,loss :7.212279319763184, dt:268.01ms, tok/sec:3820.76
+step47 ,loss :6.9303669929504395, dt:268.35ms, tok/sec:3815.88
+step48 ,loss :7.163838863372803, dt:268.25ms, tok/sec:3817.28
+step49 ,loss :7.031510353088379, dt:268.30ms, tok/sec:3816.56
+tensor(7.0315, device='cuda:0', grad_fn=<NllLossBackward0>)
+
+
+----------------------------------------------------------------------------------------------------------------------------
+### trying with tp_32 precision-moving the tensors from fp_32
+
+since A100 gpu has been made specially for boosting these performance so it gives 8x return coming from fp_32 
+but checking that on RTX-4050 6 GB VRAM (it doesn't have have improvent as per the nvidia site ) but we get roughly  
+1.1x-1.2x performance boost coming from  fp_2
+
+
+using device: cuda
+Loaded 338025 tokens
+1 epoch=330 batches
+step0 ,loss :10.924687385559082, dt:379.49ms, tok/sec:2698.34
+step1 ,loss :9.452762603759766, dt:235.78ms, tok/sec:4343.01
+step2 ,loss :9.092066764831543, dt:233.86ms, tok/sec:4378.68
+step3 ,loss :8.757453918457031, dt:233.97ms, tok/sec:4376.61
+step4 ,loss :8.872261047363281, dt:233.98ms, tok/sec:4376.43
+step5 ,loss :8.355303764343262, dt:233.80ms, tok/sec:4379.74
+step6 ,loss :8.180490493774414, dt:233.98ms, tok/sec:4376.37
+step7 ,loss :7.99241828918457, dt:233.90ms, tok/sec:4378.01
+step8 ,loss :7.933873176574707, dt:234.20ms, tok/sec:4372.35
+step9 ,loss :7.700036525726318, dt:233.81ms, tok/sec:4379.63
+step10 ,loss :7.324662208557129, dt:234.07ms, tok/sec:4374.83
+step11 ,loss :7.6136155128479, dt:234.25ms, tok/sec:4371.45
+step12 ,loss :7.065731525421143, dt:234.23ms, tok/sec:4371.71
+step13 ,loss :7.209026336669922, dt:234.12ms, tok/sec:4373.77
+step14 ,loss :6.975046157836914, dt:234.00ms, tok/sec:4376.05
+step15 ,loss :6.911368370056152, dt:233.85ms, tok/sec:4378.94
+step16 ,loss :6.63224983215332, dt:233.85ms, tok/sec:4378.79
+step17 ,loss :6.591521263122559, dt:234.03ms, tok/sec:4375.56
+step18 ,loss :6.416758060455322, dt:234.01ms, tok/sec:4375.86
+step19 ,loss :6.503281593322754, dt:234.03ms, tok/sec:4375.55
+step20 ,loss :6.035188674926758, dt:234.00ms, tok/sec:4376.12
+step21 ,loss :13.207500457763672, dt:233.83ms, tok/sec:4379.32
+step22 ,loss :6.10387659072876, dt:234.08ms, tok/sec:4374.53
+step23 ,loss :5.899855613708496, dt:233.91ms, tok/sec:4377.74
+step24 ,loss :6.232089042663574, dt:234.12ms, tok/sec:4373.76
+step25 ,loss :6.206509590148926, dt:234.59ms, tok/sec:4365.07
+step26 ,loss :6.2866530418396, dt:234.65ms, tok/sec:4363.95
+step27 ,loss :6.113739967346191, dt:234.07ms, tok/sec:4374.85
+step28 ,loss :6.305127143859863, dt:234.15ms, tok/sec:4373.18
+step29 ,loss :6.3035101890563965, dt:233.90ms, tok/sec:4377.93
+step30 ,loss :6.165439605712891, dt:234.02ms, tok/sec:4375.72
+step31 ,loss :6.139072418212891, dt:234.48ms, tok/sec:4367.04
+step32 ,loss :6.536425590515137, dt:234.07ms, tok/sec:4374.79
+step33 ,loss :6.412374973297119, dt:234.09ms, tok/sec:4374.36
+step34 ,loss :6.355844497680664, dt:234.65ms, tok/sec:4363.97
+step35 ,loss :5.983860015869141, dt:234.23ms, tok/sec:4371.82
+step36 ,loss :5.947993278503418, dt:234.18ms, tok/sec:4372.78
+step37 ,loss :6.336245536804199, dt:234.06ms, tok/sec:4375.02
+step38 ,loss :5.851812362670898, dt:234.31ms, tok/sec:4370.31
+step39 ,loss :6.48852014541626, dt:234.20ms, tok/sec:4372.39
+step40 ,loss :6.409280300140381, dt:234.16ms, tok/sec:4373.15
+step41 ,loss :6.515042304992676, dt:234.03ms, tok/sec:4375.60
+step42 ,loss :6.28810453414917, dt:233.94ms, tok/sec:4377.15
+step43 ,loss :6.378885269165039, dt:233.92ms, tok/sec:4377.50
+step44 ,loss :6.412084579467773, dt:234.23ms, tok/sec:4371.73
+step45 ,loss :6.334506511688232, dt:234.08ms, tok/sec:4374.48
+step46 ,loss :7.213923931121826, dt:233.76ms, tok/sec:4380.65
+step47 ,loss :6.929800033569336, dt:234.15ms, tok/sec:4373.27
+step48 ,loss :7.160459518432617, dt:234.19ms, tok/sec:4372.46
+step49 ,loss :7.026751518249512, dt:235.72ms, tok/sec:4344.19
+tensor(7.0268, device='cuda:0', grad_fn=<NllLossBackward0>)
+
+
+------------------------------------------------------------------------------------------------------------------------------

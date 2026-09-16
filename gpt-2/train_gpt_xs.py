@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import math
 import torch.nn.functional as F
 import tiktoken
+import time
 
 @dataclass
 class GPTConfig:
@@ -278,19 +279,29 @@ class DataLoaderLite:
             self.current_position=0
         return x,y    
     
-train_loader = DataLoaderLite(B=4,T=32,device=device)
+train_loader = DataLoaderLite(B=1,T=1024,device=device) #for 16,1024 our vram was less #use power of 2 for optimal performance
+
+torch.set_float32_matmul_precision('high')#tf-32 bit precision whereever pytorch could use it so 
+#so that we could trade off bw speed and lower floating point accuracy it doesn't that much damage though 
+
 # model=GPT2.from_pretrained("gpt2")
 model =GPT2(GPTConfig())
 # model.eval() # not training but evaluating
 model.to('cuda')
 optimizer=torch.optim.AdamW(model.parameters(),lr=3e-4)
 for i in range(50):
-    optimizer.zero_grad()
+    t0=time.time()
     x,y= train_loader.next_batch()
+    optimizer.zero_grad()
     logits,loss=model(x,y)
     loss.backward()
     optimizer.step()
-    print(f"step{i} ,loss :{loss.item()}")
+    torch.cuda.synchronize()#to sync the cpu time and the gpu time 
+    t1=time.time()
+    dt=(t1-t0)*1000 #time differnce in milisec
+    #through put
+    token_per_sec=(train_loader.B*train_loader.T)/(t1-t0)
+    print(f"step{i} ,loss :{loss.item()}, dt:{dt:.2f}ms, tok/sec:{token_per_sec:.2f}")
 
 print(loss)
 import sys
