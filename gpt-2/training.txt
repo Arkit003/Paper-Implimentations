@@ -1,4 +1,9 @@
 #baseline for float-32 on [1,1024]#the memory could only suport till this as this was using 3735 mb from 6141 mb of memory
+
+-----------------------------------------------------------------------------------------------------------------------------------
+#with removing ugly numbers (just one for now vocab_size 50257--->50304 that is divisible by various power of 2)
+#even though it lets to extra calculation still drops our time from 
+## 113->109 ms
 -------------------------------------------------------------------------------------------------------------------------
 #with adding flash attention 
 ## we were able to do till batch size 4,1024 on our RTX-4050

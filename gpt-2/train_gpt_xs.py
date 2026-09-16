@@ -290,7 +290,7 @@ torch.set_float32_matmul_precision('high')#tf-32 bit precision whereever pytorch
 #so that we could trade off bw speed and lower floating point accuracy it doesn't that much damage though 
 
 # model=GPT2.from_pretrained("gpt2")
-model =GPT2(GPTConfig())
+model =GPT2(GPTConfig(vocab_size=50304))#modifying ugly nbr 
 # model.eval() # not training but evaluating
 model.to('cuda')
 model=torch.compile(model)
@@ -311,6 +311,9 @@ for i in range(50):
     print(f"step{i} ,loss :{loss.item()}, dt:{dt:.2f}ms, tok/sec:{token_per_sec:.2f}")
 
 print(loss)
+
+
+
 import sys
 sys.exit(0)
 

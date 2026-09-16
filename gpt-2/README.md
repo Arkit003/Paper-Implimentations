@@ -20,3 +20,7 @@ for input, target in data:
     loss.backward()
     optimizer.step()
 ```
+
+### ugly numbers
+cuda is otpimal for power of 2 and even nbrs and very worst optimized for prime nbrs and odd nbrs , 
+so we try to use them very less in our code for optimal training
