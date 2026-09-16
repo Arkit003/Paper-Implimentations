@@ -259,23 +259,7 @@ class GPT2(nn.Module):
         print(f"using fused AdamW: {use_fused}")
         optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=use_fused)
         return optimizer
-
-#we preload the weights from the hf and trying infernce on our architecture
-
-num_return_sequences=5
-max_length=30
-device = "cpu"
-if torch.cuda.is_available():
-    device = "cuda"
-elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-    device = "mps"
-print(f"using device: {device}")
-
-torch.manual_seed(1337)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed(1337)
-
-
+    
 class DataLoaderLite:
     def __init__(self,B,T,device):
         self.B=B
@@ -304,11 +288,39 @@ class DataLoaderLite:
         
         #getting the next set of tokens for the next batch
         self.current_position+=B*T
-        if self.current_position >len(self.tokens):
+        if self.current_position + B*T+1>len(self.tokens):
             self.current_position=0
-        return x,y    
+        return x,y 
+
+#we preload the weights from the hf and trying infernce on our architecture
+
+num_return_sequences=5
+max_length=30
+device = "cpu"
+if torch.cuda.is_available():
+    device = "cuda"
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    device = "mps"
+print(f"using device: {device}")
+
+torch.manual_seed(1337)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1337)
+
+
+total_batch_size=524288 #2**19,~0.5M(acc to paper),in number of tokens
+B=4#micro batch size 16 used but our gpu could only process 4
+T=1024 #seqlen
+assert total_batch_size%(B*T)==0,"make sure total_batch_size is divisible by B*T"
+grad_accum_steps=total_batch_size//(B*T)
+print(f"total desired batch size: {total_batch_size}")
+print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
+
+train_loader = DataLoaderLite(B=B, T=T,device=device)
+
+   
     
-train_loader = DataLoaderLite(B=4,T=1024,device=device) #for 16,1024 our vram was less #use power of 2 for optimal performance
+# train_loader = DataLoaderLite(B=4,T=1024,device=device) #for 16,1024 our vram was less #use power of 2 for optimal performance
 
 torch.set_float32_matmul_precision('high')#tf-32 bit precision whereever pytorch could use it so 
 #so that we could trade off bw speed and lower floating point accuracy it doesn't that much damage though 
@@ -343,12 +355,18 @@ optimizer = model.configure_optimizers(weight_decay=0.1, learning_rate=6e-4, dev
 
 for step in range(max_steps):
     t0=time.time()
-    x,y= train_loader.next_batch()
     optimizer.zero_grad()
+    loss_accum=0.0
+    #accumating grad to get the desired batch size and then updating the loss
+    for micro_step in range(grad_accum_steps):
+        x,y= train_loader.next_batch()
     
-    with torch.autocast(device_type=device,dtype=torch.bfloat16):
-        logits,loss=model(x,y)
-    loss.backward()
+    
+        with torch.autocast(device_type=device,dtype=torch.bfloat16):
+            logits,loss=model(x,y)
+        loss=loss/grad_accum_steps # to normalize the loss acc to the desired bahaviour of the loss function (prev one just add it does not scale)
+        loss_accum +=loss.detach()
+        loss.backward()
     
     # calculating global norm of the gradients-
     #take the gradient sqaure it and then add all up the take the square root of that that the norm of parameter vector
@@ -365,15 +383,16 @@ for step in range(max_steps):
     t1=time.time()
     dt=(t1-t0)*1000 #time differnce in milisec
     #through put
-    token_per_sec=(train_loader.B*train_loader.T)/(t1-t0)
-    print(f"step: {step:4d} | loss :{loss.item():.4f}| lr:{lr:.4e} | norm:{norm:.4f} | dt:{dt:.2f}ms | tok/sec:{token_per_sec:.2f}")
+    token_processed =train_loader.B*train_loader.T *grad_accum_steps
+    token_per_sec=(token_processed)/(t1-t0)
+    print(f"step: {step:4d} | loss :{loss_accum.item():.6f}| lr:{lr:.4e} | norm:{norm:.4f} | dt:{dt:.2f}ms | tok/sec:{token_per_sec:.2f}")
 
 print(loss)
 
 
 
-import sys
-sys.exit(0)
+# import sys
+# sys.exit(0)
 
 print("not working2")
 #prefix tokens
