@@ -1,5 +1,64 @@
 #baseline for float-32 on [1,1024]#the memory could only suport till this as this was using 3735 mb from 6141 mb of memory
+-------------------------------------------------------------------------------------------------------------------------
+#with adding flash attention 
+## we were able to do till batch size 4,1024 on our RTX-4050
+# documenting only 1,1024 tho to keep consistent
+#imporved from 130->113
 
+using device: cuda
+Loaded 338025 tokens
+1 epoch=330 batches
+step0 ,loss :10.925182342529297, dt:1674.38ms, tok/sec:611.57
+step1 ,loss :9.452913284301758, dt:125.69ms, tok/sec:8147.00
+step2 ,loss :9.092297554016113, dt:115.94ms, tok/sec:8832.49
+step3 ,loss :8.75748062133789, dt:113.43ms, tok/sec:9027.38
+step4 ,loss :8.872807502746582, dt:113.74ms, tok/sec:9002.80
+step5 ,loss :8.355369567871094, dt:113.77ms, tok/sec:9000.67
+step6 ,loss :8.180782318115234, dt:114.46ms, tok/sec:8946.39
+step7 ,loss :7.993442535400391, dt:114.58ms, tok/sec:8936.88
+step8 ,loss :7.93409538269043, dt:113.65ms, tok/sec:9009.83
+step9 ,loss :7.700778484344482, dt:114.47ms, tok/sec:8945.87
+step10 ,loss :7.325498104095459, dt:115.75ms, tok/sec:8846.79
+step11 ,loss :7.614078521728516, dt:113.72ms, tok/sec:9004.56
+step12 ,loss :7.0660481452941895, dt:114.19ms, tok/sec:8967.67
+step13 ,loss :7.209576606750488, dt:113.43ms, tok/sec:9027.36
+step14 ,loss :6.97540283203125, dt:113.96ms, tok/sec:8985.31
+step15 ,loss :6.911293029785156, dt:113.61ms, tok/sec:9013.16
+step16 ,loss :6.631545066833496, dt:114.34ms, tok/sec:8955.67
+step17 ,loss :6.591314315795898, dt:114.78ms, tok/sec:8921.33
+step18 ,loss :6.415841579437256, dt:113.89ms, tok/sec:8990.78
+step19 ,loss :6.501214981079102, dt:113.54ms, tok/sec:9018.66
+step20 ,loss :6.034933090209961, dt:114.66ms, tok/sec:8930.71
+step21 ,loss :12.459636688232422, dt:113.93ms, tok/sec:8987.94
+step22 ,loss :6.109501838684082, dt:113.35ms, tok/sec:9033.67
+step23 ,loss :5.909353733062744, dt:113.40ms, tok/sec:9030.27
+step24 ,loss :6.238590240478516, dt:114.19ms, tok/sec:8967.63
+step25 ,loss :6.207664489746094, dt:113.82ms, tok/sec:8996.82
+step26 ,loss :6.293331146240234, dt:113.82ms, tok/sec:8996.35
+step27 ,loss :6.142168045043945, dt:113.49ms, tok/sec:9022.70
+step28 ,loss :6.297757625579834, dt:113.59ms, tok/sec:9014.67
+step29 ,loss :6.22666072845459, dt:113.86ms, tok/sec:8993.51
+step30 ,loss :6.18284273147583, dt:113.58ms, tok/sec:9015.39
+step31 ,loss :6.167551517486572, dt:113.88ms, tok/sec:8991.66
+step32 ,loss :6.536144733428955, dt:113.60ms, tok/sec:9013.70
+step33 ,loss :6.420790195465088, dt:113.56ms, tok/sec:9017.55
+step34 ,loss :6.369135856628418, dt:113.70ms, tok/sec:9006.30
+step35 ,loss :5.989876747131348, dt:113.58ms, tok/sec:9015.45
+step36 ,loss :5.946008682250977, dt:113.67ms, tok/sec:9008.37
+step37 ,loss :6.335422515869141, dt:113.51ms, tok/sec:9020.92
+step38 ,loss :5.8548903465271, dt:113.74ms, tok/sec:9003.20
+step39 ,loss :6.474900722503662, dt:113.63ms, tok/sec:9011.45
+step40 ,loss :6.415030479431152, dt:113.63ms, tok/sec:9011.74
+step41 ,loss :6.518000602722168, dt:114.75ms, tok/sec:8923.51
+step42 ,loss :6.290528297424316, dt:113.59ms, tok/sec:9015.20
+step43 ,loss :6.380548477172852, dt:113.51ms, tok/sec:9021.24
+step44 ,loss :6.409402847290039, dt:113.77ms, tok/sec:9000.24
+step45 ,loss :6.334992408752441, dt:113.86ms, tok/sec:8993.81
+step46 ,loss :7.215024471282959, dt:113.64ms, tok/sec:9011.10
+step47 ,loss :6.93053674697876, dt:114.31ms, tok/sec:8958.34
+step48 ,loss :7.157716751098633, dt:113.55ms, tok/sec:9017.70
+step49 ,loss :7.0233473777771, dt:113.42ms, tok/sec:9028.05
+tensor(7.0233, device='cuda:0', grad_fn=<CompiledFunctionBackward>)
 ------------------------------------------------------------------------------------------------------------------------------
 ## with torch.compile  - imporved from 200ms to 130 ms
 step0 ,loss :10.925048828125, dt:18176.65ms, tok/sec:56.34
