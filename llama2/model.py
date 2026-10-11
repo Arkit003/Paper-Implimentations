@@ -161,7 +161,29 @@ class SelfAttention(nn.Module):
         out=torch.matmul(scores,values)
         out=(out.transpose(1,2).contiguous().view(batch_size,seq_len,-1))
         return self.wo(out) #(B,1,dim) -> (B,1,dim)
-    
+
+class FeedForward(nn.Moudle):
+    def __init__(self,args:ModelArgs):
+        super().__init__()
+         
+        hidden_dim =4* args.dim #4*4096 = 16384
+        hidden_dim = int(2* hidden_dim/3)#10922
+        if args.ffn_dim_multiplier is not None:
+            hidden_dim =(args.ffn_dim_multiplier * hidden_dim)
+        #rounding off the hidden dim to be nearest multiple_of divisible by multiple_of(256) 
+        hidden_dim=args.multiple_of*((hidden_dim+args.multiple_of-1)//args.multiple_of)
+        
+        self.w1=nn.Linear(args.dim,hidden_dim)
+        self.w2=nn.Linear(hidden_dim,args.dim)
+        self.w3 = nn.Linear(args.dim,hidden_dim)
+        
+    def forward(self,x:torch.Tensor):
+        swish=F.silu(self.w1(x))
+        x_v=self.w3(x)
+        x=swish * x_v
+        x=self.w2(x)
+        return x
+        
         
 class EncoderBlock(nn.Module):
     def __init__(self, args:ModelArgs):
