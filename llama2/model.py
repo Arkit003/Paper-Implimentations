@@ -91,6 +91,7 @@ class RMSNorm(nn.Module):
 
 class SelfAttention(nn.Module):
     def __init__(self,args:ModelArgs):
+        super().__init__()
         self.n_kv_heads=args.n_heads if args.n_kv_heads is None else args.n_kv_heads
         self.n_head_q = args.n_heads
         
@@ -162,7 +163,7 @@ class SelfAttention(nn.Module):
         out=(out.transpose(1,2).contiguous().view(batch_size,seq_len,-1))
         return self.wo(out) #(B,1,dim) -> (B,1,dim)
 
-class FeedForward(nn.Moudle):
+class FeedForward(nn.Module):
     def __init__(self,args:ModelArgs):
         super().__init__()
          
@@ -173,9 +174,9 @@ class FeedForward(nn.Moudle):
         #rounding off the hidden dim to be nearest multiple_of divisible by multiple_of(256) 
         hidden_dim=args.multiple_of*((hidden_dim+args.multiple_of-1)//args.multiple_of)
         
-        self.w1=nn.Linear(args.dim,hidden_dim)
-        self.w2=nn.Linear(hidden_dim,args.dim)
-        self.w3 = nn.Linear(args.dim,hidden_dim)
+        self.w1=nn.Linear(args.dim,hidden_dim,bias=False)
+        self.w2=nn.Linear(hidden_dim,args.dim,bias=False)
+        self.w3 = nn.Linear(args.dim,hidden_dim,bias=False)
         
     def forward(self,x:torch.Tensor):
         swish=F.silu(self.w1(x))
@@ -195,12 +196,12 @@ class EncoderBlock(nn.Module):
         self.head_dim=self.dim/self.n_heads
         
         #normalization before attention
-        self.attention_norm = RMSNorm(args,eps=self.eps)
+        self.attention_norm = RMSNorm(args.dim,eps=self.eps)
         
         self.attention=SelfAttention(args)
         
         #normalization before ffn
-        self.ffn_norm = RMSNorm(args,eps=self.eps)
+        self.ffn_norm = RMSNorm(args.dim,eps=self.eps)
         
         self.feed_forward = FeedForward(args)
         

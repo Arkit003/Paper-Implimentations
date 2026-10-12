@@ -1,0 +1,5 @@
+torch
+sentencepiece
+tqdm
+safetensors
+numpy

@@ -5,7 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "numpy>=2.5.4",
     "pip>=26.2.1",
+    "safetensors>=0.8.0",
+    "sentencepiece>=0.2.2",
     "torch>=2.14.1",
     "tqdm>=4.70.1",
 ]
