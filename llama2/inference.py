@@ -106,6 +106,73 @@ class Llama(nn.Module):
             
         return Llama(model,tokenizer,model_args)
     
+    
+    def text_completion(self,prompts:list[str], temperature:float=0.6, top_p:float=0.9, max_gen_len:Optional[int]=None):
+        """output generation tokenizing prompt ,prefilling and decoding """
+        if max_gen_len is None:
+            max_gen_len = self.args.max_seq_len
+            
+        #coverting each prompt into tokens using our tokenizer
+        prompt_tokens=[self.tokenizer.tokenize(prompt,out_type=int,add_eos=False,add_bos=True) for prompt in prompts]
+        
+        #making sure the batch size is not to large
+        batch_size = len(prompt_tokens)
+        assert batch_size<=self.args.max_batch_size, "batch size is too large"
+        
+        max_prompt_len = max(len(prompt) for prompt in prompt_tokens)
+        
+        #making sure the maxing prompt_len is not larger than our seq_len
+        assert max_prompt_len<=self.args.max_seq_len, "prompt size is too large"
+        
+        #how many tokens we need to generate
+        total_len = min(self.args.max_seq_len, max_gen_len + max_prompt_len)
+        
+        #creating the list that will contain the generated tokens as well as prompt
+        pad_id = self.tokenizer.pad_id()
+        tokens=torch.full((batch_size,total_len),pad_id,dtype=torch.long, device = device)
+        
+        for k,t in enumerate(prompt_tokens):
+            #filling the prompt tokens
+            tokens[k,:len(t)]=torch.tensor(t,dtype=torch.long,device=device)
+            
+        eos_reached = torch.Tensor([False]*batch_size,device=device)
+        prompt_token_mask = tokens!=pad_id #true if the token is a prompt token,False otherwise
+        
+        for curr_pos in tqdm(range(1,total_len),desc = 'generating tokens'):
+            with torch.no_grad():
+                logits = self.model.forward(tokens[:,curr_pos-1:curr_pos],curr_pos)
+            if temperature>0:
+                #the temperature is applied before the softmax
+                probs  = torch.softmax(logits[:,-1]/temperature,dim= -1)
+                next_token = self._sample_top_p(probs,top_p)
+            else:
+                #select greddly
+                next_token= torch.argmax(logits[:,-1],dim=-1)
+        
+            next_token = next_token.reshape(-1)
+            #only replace the token if its a padding token
+            next_token  = torch.where(prompt_token_mask[:,curr_pos],tokens[:curr_pos],next_token)
+            tokens[:,curr_pos]= next_token
+            #breaking when finding the eos token instead of pad token
+            eos_reached |= (~prompt_token_mask[:,curr_pos])& (next_token == self.tokenizer.eos_id())
+            if all(eos_reached):
+                break
+            
+        out_tokens=[]
+        out_text=[]
+        for prompt_index, current_prompt_tokens in enumerate(tokens.tolist()):
+            #cutting out the eos token if found 
+            if self.tokenizer.eos_id() in current_prompt_tokens:
+                eos_idx = current_prompt_tokens.index(self.tokenizer.eos_id())
+                current_prompt_tokens = current_prompt_tokens[:eos_idx]
+            out_tokens.append(current_prompt_tokens)
+            current_prompt_text = self.tokenizer.decode(current_prompt_tokens)
+            out_text.append(current_prompt_text)
+        return (out_tokens,out_text)
+            
+            
+
+    
 if __name__=="__main__":
     torch.manual_seed(0)
     
