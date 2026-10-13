@@ -7,7 +7,7 @@ from safetensors.torch import load_file
 from sentencepiece import SentencePieceProcessor
 import torch
 import torch.nn as nn
-import tqdm
+from tqdm import tqdm
 
 from model import Transformer,ModelArgs
 
@@ -82,6 +82,7 @@ class Llama(nn.Module):
             n_heads=params["num_attention_heads"],
             n_kv_heads=params["num_key_value_heads"],
             vocab_size=params["vocab_size"],
+            intermediate_size=params.get("intermediate_size"),
             norm_eps=params["rms_norm_eps"],
             max_seq_len=max_seq_len,
             max_batch_size=max_batch_size,
@@ -106,6 +107,16 @@ class Llama(nn.Module):
             
         return Llama(model,tokenizer,model_args)
     
+    def _sample_top_p(self, probs:torch.Tensor, p):
+        probs_sort , probs_idx =torch.sort(probs,dim=-1,descending=True)
+        probs_sum = torch.cumsum(probs_sort,dim=-1)
+        mask = probs_sum - probs_sort >p
+        probs_sort[mask]=0.0
+        probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+        next_token = torch.multinomial(probs_sort,num_samples=1)
+        next_token = torch.gather(probs_idx,-1,next_token)
+        return next_token
+        
     
     def text_completion(self,prompts:list[str], temperature:float=0.6, top_p:float=0.9, max_gen_len:Optional[int]=None):
         """output generation tokenizing prompt ,prefilling and decoding """
@@ -128,6 +139,7 @@ class Llama(nn.Module):
         total_len = min(self.args.max_seq_len, max_gen_len + max_prompt_len)
         
         #creating the list that will contain the generated tokens as well as prompt
+        device = self.args.device
         pad_id = self.tokenizer.pad_id()
         tokens=torch.full((batch_size,total_len),pad_id,dtype=torch.long, device = device)
         
@@ -135,12 +147,12 @@ class Llama(nn.Module):
             #filling the prompt tokens
             tokens[k,:len(t)]=torch.tensor(t,dtype=torch.long,device=device)
             
-        eos_reached = torch.Tensor([False]*batch_size,device=device)
+        eos_reached = torch.zeros(batch_size, dtype=torch.bool, device=device)
         prompt_token_mask = tokens!=pad_id #true if the token is a prompt token,False otherwise
         
         for curr_pos in tqdm(range(1,total_len),desc = 'generating tokens'):
             with torch.no_grad():
-                logits = self.model.forward(tokens[:,curr_pos-1:curr_pos],curr_pos)
+                logits = self.model.forward(tokens[:,curr_pos-1:curr_pos],curr_pos-1)
             if temperature>0:
                 #the temperature is applied before the softmax
                 probs  = torch.softmax(logits[:,-1]/temperature,dim= -1)
@@ -151,7 +163,7 @@ class Llama(nn.Module):
         
             next_token = next_token.reshape(-1)
             #only replace the token if its a padding token
-            next_token  = torch.where(prompt_token_mask[:,curr_pos],tokens[:curr_pos],next_token)
+            next_token  = torch.where(prompt_token_mask[:,curr_pos],tokens[:,curr_pos],next_token)
             tokens[:,curr_pos]= next_token
             #breaking when finding the eos token instead of pad token
             eos_reached |= (~prompt_token_mask[:,curr_pos])& (next_token == self.tokenizer.eos_id())
@@ -179,14 +191,41 @@ if __name__=="__main__":
     allow_cuda= False
     device='cuda' if torch.cuda.is_available() and allow_cuda else "cpu"
     
+    prompts = [
+        "Simply put, the theory of relativity states that ",
+        "If Google was an Italian company founded in Milan, it would",
+        # Few shot promt
+        """Translate English to French:
+        
+        sea otter => loutre de mer
+        peppermint => menthe poivrée
+        plush girafe => girafe peluche
+        cheese =>""",
+        # Zero shot prompt
+        """Tell me if the following person is actually Doraemon disguised as human:
+        Name: Arkit Kumar
+        Decision: 
+        """
+    ]
+    
     model=Llama.build(
         checkpoints_dir='models/llama-2-7b-hf/',
         tokenizer_path='models/llama-2-7b-hf/tokenizer.model',
         load_model=True,
         max_seq_len=1024,
-        max_batch_size=3,
+        max_batch_size=len(prompts),
         device=device,
         
     )
     
     print("model loaded succesfully")
+
+    #inferncing 
+    
+    
+    
+    out_tokens, out_text = model.text_completion(prompts,max_gen_len=64)
+    assert (len(out_text))==len(prompts)
+    for i in range(len(out_text)):
+        print(f'{out_text[i]}')
+        print("-"*50)

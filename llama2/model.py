@@ -14,6 +14,7 @@ class ModelArgs:
     vocab_size: int = -1 # Later set in the build method
     multiple_of: int = 256
     ffn_dim_multiplier: Optional[float] = None
+    intermediate_size: Optional[int] = None
     norm_eps: float = 1e-5
 
     # Needed for KV cache
@@ -167,12 +168,14 @@ class FeedForward(nn.Module):
     def __init__(self,args:ModelArgs):
         super().__init__()
          
-        hidden_dim =4* args.dim #4*4096 = 16384
-        hidden_dim = int(2* hidden_dim/3)#10922
-        if args.ffn_dim_multiplier is not None:
-            hidden_dim =(args.ffn_dim_multiplier * hidden_dim)
-        #rounding off the hidden dim to be nearest multiple_of divisible by multiple_of(256) 
-        hidden_dim=args.multiple_of*((hidden_dim+args.multiple_of-1)//args.multiple_of)
+        if args.intermediate_size is not None:
+            hidden_dim = args.intermediate_size
+        else:
+            hidden_dim = int(2 * (4 * args.dim) / 3)
+            if args.ffn_dim_multiplier is not None:
+                hidden_dim = int(args.ffn_dim_multiplier * hidden_dim)
+            # Round to the nearest multiple_of when no explicit size is given.
+            hidden_dim = args.multiple_of * ((hidden_dim + args.multiple_of - 1) // args.multiple_of)
         
         self.w1=nn.Linear(args.dim,hidden_dim,bias=False)
         self.w2=nn.Linear(hidden_dim,args.dim,bias=False)
@@ -207,9 +210,11 @@ class EncoderBlock(nn.Module):
         
     def forward(self,x:torch.Tensor, start_pos:int , freqs_complex:torch.Tensor):
         #(B,seq_len,dim) + (B,seq_len ,dim) -> (B,seq_len,dim)
-        h=self.attention.forward(self.attention_norm(x),start_pos,freqs_complex)
+        h = x + self.attention.forward(
+            self.attention_norm(x), start_pos, freqs_complex
+        )
         
-        out=h + self.feed_forward.forward(self.ffn_norm(x))
+        out = h + self.feed_forward.forward(self.ffn_norm(h))
         return out
 
 class Transformer(nn.Module):
