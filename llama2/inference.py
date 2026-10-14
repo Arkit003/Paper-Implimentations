@@ -119,7 +119,7 @@ class Llama(nn.Module):
         
     
     def text_completion(self,prompts:list[str], temperature:float=0.6, top_p:float=0.9, max_gen_len:Optional[int]=None):
-        """output generation tokenizing prompt ,prefilling and decoding """
+        """output generation -> tokenizing prompt ,prefilling and decoding """
         if max_gen_len is None:
             max_gen_len = self.args.max_seq_len
             

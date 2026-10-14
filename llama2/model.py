@@ -43,7 +43,7 @@ def precompute_theta_pos_frequencies(head_dim:int,seq_len:int,device:str,theta:f
     return freqs_complex
       
 def apply_rotatary_embedding(x:torch.Tensor , freqs_complex:torch.Tensor, device:str):
-    ''' it will be applied to only K and V not Q '''
+    ''' it will be applied to only K and Q not V '''
     #grouping two consecutive embedding and converting into complex nbr
     #shape : (B,seq_len,H,head_dim) -> (B,seq_len,h,head_dim/2)
     x_complex=torch.view_as_complex(x.float().reshape(*x.shape[:-1],-1,2))
@@ -106,10 +106,10 @@ class SelfAttention(nn.Module):
         self.wv=nn.Linear(args.dim,self.n_kv_heads*self.head_dim,bias=False)
         self.wo=nn.Linear(self.head_dim*args.n_heads, args.dim , bias=False)
         
-        self.cache_k = torch.zeros((args.max_batch_size, args.max_seq_len , self.n_kv_heads,self.head_dim))
-        self.cache_v = torch.zeros((args.max_batch_size, args.max_seq_len, self.n_kv_heads,self.head_dim))
+        self.cache_k = torch.zeros((args.max_batch_size, args.max_seq_len , self.n_kv_heads,self.head_dim),device=args.device)
+        self.cache_v = torch.zeros((args.max_batch_size, args.max_seq_len, self.n_kv_heads,self.head_dim),device=args.device)
         
-    def forward(self, x:torch.Tensor , start_pos:int, freq_complex:torch.Tensor):
+    def forward(self, x:torch.Tensor , start_pos:int, freq_complex:torch.Tensor,valid_len=None):
         batch_size,seq_len, _ =x.shape #(B,1,dim) seq_len ==1 as we are inferencing 1 token at a time 
         
         #(B,1,H_q * head_dim)
@@ -189,7 +189,7 @@ class FeedForward(nn.Module):
         return x
         
         
-class EncoderBlock(nn.Module):
+class DecoderBlock(nn.Module):
     def __init__(self, args:ModelArgs):
         super().__init__()
         
@@ -230,7 +230,7 @@ class Transformer(nn.Module):
         
         self.layers=nn.ModuleList()
         for _ in range(args.n_layers):
-            self.layers.append(EncoderBlock(args))
+            self.layers.append(DecoderBlock(args))
         
         self.norm =RMSNorm(args.dim,eps=args.norm_eps)
         
@@ -254,7 +254,7 @@ class Transformer(nn.Module):
         #retrive the pair (m,theta) correspoding to the positions[start_pos,start_pos+seq_len]
         freqs_complex=self.freqs_complex[start_pos:start_pos+seq_len]
         
-        #applying to all the encoders layers
+        #applying to all the decoders layers
         for layer in self.layers:
             h=layer(h,start_pos,freqs_complex)
         h=self.norm(h)
