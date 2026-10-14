@@ -109,11 +109,11 @@ class SelfAttention(nn.Module):
         self.cache_k = torch.zeros((args.max_batch_size, args.max_seq_len , self.n_kv_heads,self.head_dim),device=args.device)
         self.cache_v = torch.zeros((args.max_batch_size, args.max_seq_len, self.n_kv_heads,self.head_dim),device=args.device)
         
-    def forward(self, x:torch.Tensor , start_pos:int, freq_complex:torch.Tensor,valid_len=None):
-        batch_size,seq_len, _ =x.shape #(B,1,dim) seq_len ==1 as we are inferencing 1 token at a time 
+    def forward(self, x:torch.Tensor , start_pos:int, freq_complex:torch.Tensor,valid_len=None,attention_mask=None):
+        batch_size,seq_len, _ =x.shape #(B,seq_len,dim) 
         
         #(B,1,H_q * head_dim)
-        xq=self.wq(x)
+        xq=self.wq(x) 
         #here the kv_head*head_dim may not equal to dim as we are using GQA
         #(B,1,H_KV * head_dim)
         xk=self.wk(x)
@@ -130,15 +130,22 @@ class SelfAttention(nn.Module):
         xq = apply_rotatary_embedding(xq,freq_complex,device=x.device)
         xk = apply_rotatary_embedding(xk,freq_complex,device=x.device)
         
+        #valid_len is the nbr of key position whose output is in KV cache after processing the current input
+        # how much of the cache is real after this write
+        end = start_pos + seq_len if valid_len is None else valid_len
+        assert end >= start_pos + seq_len, (
+            f"valid_len={end} would hide {start_pos + seq_len - end} of the {seq_len} "
+            f"tokens being written at start_pos={start_pos}"
+        )
+        
         #updating the cache with the newer token keys and values
         self.cache_k[:batch_size,start_pos:start_pos+seq_len] = xk
         self.cache_v[:batch_size, start_pos:start_pos+seq_len]= xv
         
-        #retriving all the cached key and values till now 
-        #(B,Seq_len_KV , H_KV,head_dim) #here seq_len_kv = start_pos+seq_len
-        keys = self.cache_k[:batch_size,:start_pos+seq_len]
-        values = self.cache_v[:batch_size,:start_pos+seq_len]
         
+        keys = self.cache_k[:batch_size,:end]
+        values = self.cache_v[:batch_size,:end]
+    
         #since the kv_head and q_head is unmatched so in the paper:
         #they repeated the same key and values head for 2 query head
         keys=repeat_kv(keys,self.n_rep)        
@@ -157,12 +164,23 @@ class SelfAttention(nn.Module):
         
         #(B,H_Q,1,head_dim) @ (B,H_Q,seq_len_kv,head_dim) -> (B,H_Q,1,seq_len_kv)
         scores=torch.matmul(xq,keys.transpose(2,3))/math.sqrt(self.head_dim)
+        
+        #adding prefill layer also if we dont want token token prompt
+        #so doing masking of the future tokens 
+        if attention_mask is not None:
+            scores = scores.masked_fill(~attention_mask[:, None, None, :end], float("-inf"))
+        
+        rows = torch.arange(start_pos, start_pos + seq_len, device=x.device).unsqueeze(1)
+        cols = torch.arange(end, device=x.device).unsqueeze(0)
+        scores = scores.masked_fill(cols > rows, float("-inf"))
+                
+        
         scores=F.softmax(scores.float(),dim=-1).type_as(xq)
         
         #(B,H_Q,1,seq_len_kv) @ (B,H_Q,seq_len_kv,head_dim)->(B,H_Q,1,head_dim)
         out=torch.matmul(scores,values)
         out=(out.transpose(1,2).contiguous().view(batch_size,seq_len,-1))
-        return self.wo(out) #(B,1,dim) -> (B,1,dim)
+        return self.wo(out).type_as(x) #(B,1,dim) -> (B,1,dim)
 
 class FeedForward(nn.Module):
     def __init__(self,args:ModelArgs):
@@ -208,10 +226,10 @@ class DecoderBlock(nn.Module):
         
         self.feed_forward = FeedForward(args)
         
-    def forward(self,x:torch.Tensor, start_pos:int , freqs_complex:torch.Tensor):
+    def forward(self,x:torch.Tensor, start_pos:int , freqs_complex:torch.Tensor,valid_len=None,mask_attention=None):
         #(B,seq_len,dim) + (B,seq_len ,dim) -> (B,seq_len,dim)
         h = x + self.attention.forward(
-            self.attention_norm(x), start_pos, freqs_complex
+            self.attention_norm(x), start_pos, freqs_complex,valid_len,mask_attention
         )
         
         out = h + self.feed_forward.forward(self.ffn_norm(h))
@@ -242,10 +260,10 @@ class Transformer(nn.Module):
             device =self.args.device           
             )
         
-    def forward(self,tokens:torch.Tensor,start_pos:int):
+    def forward(self,tokens:torch.Tensor,start_pos:int,valid_len=None, attention_mask=None):
         #(B,seqlen)
         batch_size,seq_len=tokens.shape
-        assert seq_len==1,"only one token a time can be procesed" #as we are not training the model
+        # prefill: seq_len = prompt length. decode: seq_len = 1.
         
         #converting the tokens into embeddings
         # (B,seq_len)->(B,seq_len,dim)
@@ -256,7 +274,7 @@ class Transformer(nn.Module):
         
         #applying to all the decoders layers
         for layer in self.layers:
-            h=layer(h,start_pos,freqs_complex)
+            h=layer(h,start_pos,freqs_complex,valid_len,attention_mask)
         h=self.norm(h)
         output=self.output(h).float()
         return output    

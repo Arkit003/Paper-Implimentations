@@ -118,7 +118,7 @@ class Llama(nn.Module):
         return next_token
         
     
-    def text_completion(self,prompts:list[str], temperature:float=0.6, top_p:float=0.9, max_gen_len:Optional[int]=None):
+    def text_completion(self,prompts:list[str], temperature:float=0.6, top_p:float=0.9, max_gen_len:Optional[int]=None, use_prefill:bool=True):
         """output generation -> tokenizing prompt ,prefilling and decoding """
         if max_gen_len is None:
             max_gen_len = self.args.max_seq_len
@@ -150,17 +150,42 @@ class Llama(nn.Module):
         eos_reached = torch.zeros(batch_size, dtype=torch.bool, device=device)
         prompt_token_mask = tokens!=pad_id #true if the token is a prompt token,False otherwise
         
-        for curr_pos in tqdm(range(1,total_len),desc = 'generating tokens'):
+        #adding prefill generation before decoding if the user wants
+        prompt_lens=torch.tensor([len(t) for t in prompt_tokens],device=device)
+        positions = torch.arange(total_len,device=device) #(1,total_len)
+        attention_mask = positions<prompt_lens.unsqueeze(1)#(B,total_len)
+        
+        if use_prefill:
             with torch.no_grad():
-                logits = self.model.forward(tokens[:,curr_pos-1:curr_pos],curr_pos-1)
+                logits = self.model.forward(
+                    tokens[:, :max_prompt_len].clamp(min=0),   # clamp: pad slots must be embeddable
+                    0,
+                    valid_len=max_prompt_len,
+                    attention_mask=attention_mask,
+                )
+            last_logits = logits[:, -1, :]
+        else:
+            last_logits = None
+
+        start = max_prompt_len if use_prefill else 1
+        
+        for curr_pos in tqdm(range(start,total_len),desc = 'generating tokens'):
+            if last_logits is None:
+                with torch.no_grad():
+                    logits= self.model.forward(tokens[:,curr_pos-1:curr_pos],curr_pos-1,attention_mask=attention_mask)
+                last_logits=logits[:,-1,:]
+            
+            #sampling
             if temperature>0:
                 #the temperature is applied before the softmax
-                probs  = torch.softmax(logits[:,-1]/temperature,dim= -1)
+                probs  = torch.softmax(last_logits/temperature,dim= -1)
                 next_token = self._sample_top_p(probs,top_p)
             else:
                 #select greddly
-                next_token= torch.argmax(logits[:,-1],dim=-1)
-        
+                next_token= torch.argmax(last_logits,dim=-1)
+
+            
+            
             next_token = next_token.reshape(-1)
             #only replace the token if its a padding token
             next_token  = torch.where(prompt_token_mask[:,curr_pos],tokens[:,curr_pos],next_token)
@@ -170,6 +195,8 @@ class Llama(nn.Module):
             if all(eos_reached):
                 break
             
+            last_logits = None
+            
         out_tokens=[]
         out_text=[]
         for prompt_index, current_prompt_tokens in enumerate(tokens.tolist()):
@@ -177,6 +204,8 @@ class Llama(nn.Module):
             if self.tokenizer.eos_id() in current_prompt_tokens:
                 eos_idx = current_prompt_tokens.index(self.tokenizer.eos_id())
                 current_prompt_tokens = current_prompt_tokens[:eos_idx]
+            #drop unwritten pad slots (pad_id is -1) before decoding
+            current_prompt_tokens = [t for t in current_prompt_tokens if t >= 0]
             out_tokens.append(current_prompt_tokens)
             current_prompt_text = self.tokenizer.decode(current_prompt_tokens)
             out_text.append(current_prompt_text)
@@ -224,7 +253,7 @@ if __name__=="__main__":
     
     
     
-    out_tokens, out_text = model.text_completion(prompts,max_gen_len=64)
+    out_tokens, out_text = model.text_completion(prompts,max_gen_len=64,use_prefill=True)
     assert (len(out_text))==len(prompts)
     for i in range(len(out_text)):
         print(f'{out_text[i]}')
